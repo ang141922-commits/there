@@ -1,0 +1,49 @@
+import os
+import discord
+from openai import OpenAI
+
+# 設定 OpenRouter AI (免費 API)
+ai_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ.get("OPENROUTER_API_KEY"),
+)
+
+# 設定 Discord 機器人權限
+intents = discord.Intents.default()
+intents.message_content = True
+client = discord.Client(intents=intents)
+
+@client.event
+async def on_ready():
+    print(f"機器人已上線：{client.user}")
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    # 當機器人被 @ 提及或收到私訊時才回應
+    if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
+        async with message.channel.typing():
+            try:
+                clean_content = message.content.replace(f"<@{client.user.id}>", "").strip()
+                prompt = clean_content if clean_content else "你好！"
+                
+                # 呼叫 OpenRouter 的免費模型
+                response = ai_client.chat.completions.create(
+                    model="meta-llama/llama-3.1-8b-instruct:free",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                output = response.choices[0].message.content
+                
+                # 長訊息切割
+                if len(output) > 2000:
+                    for i in range(0, len(output), 2000):
+                        await message.channel.send(output[i:i+2000])
+                else:
+                    await message.channel.send(output)
+            except Exception as e:
+                await message.channel.send(f"處理訊息時發生錯誤：{e}")
+
+# 啟動機器人
+client.run(os.environ.get("DISCORD_TOKEN"))
